@@ -107,6 +107,57 @@ func Curl(r model.Request) string {
 	return b.String()
 }
 
+// Fetch renders a captured request as a browser fetch() call.
+func Fetch(r model.Request) string {
+	var b strings.Builder
+	scheme := orDefault(r.Scheme, "http")
+	u := fmt.Sprintf("%s://%s%s", scheme, r.Host, r.Path)
+	if r.Query != "" {
+		u += "?" + r.Query
+	}
+	fmt.Fprintf(&b, "fetch(%q, {\n  method: %q,\n", u, orDefault(r.Method, "GET"))
+	b.WriteString("  headers: {\n")
+	for _, h := range r.Headers {
+		if strings.EqualFold(h.Name, "Content-Length") || strings.EqualFold(h.Name, "Host") {
+			continue
+		}
+		fmt.Fprintf(&b, "    %q: %q,\n", h.Name, h.Value)
+	}
+	b.WriteString("  },\n")
+	if len(r.Body) > 0 && isPrintable(r.Body) {
+		fmt.Fprintf(&b, "  body: %q,\n", string(r.Body))
+	}
+	b.WriteString("});")
+	return b.String()
+}
+
+// Python renders a captured request as a python requests snippet.
+func Python(r model.Request) string {
+	var b strings.Builder
+	scheme := orDefault(r.Scheme, "http")
+	u := fmt.Sprintf("%s://%s%s", scheme, r.Host, r.Path)
+	if r.Query != "" {
+		u += "?" + r.Query
+	}
+	b.WriteString("import requests\n\n")
+	b.WriteString("headers = {\n")
+	for _, h := range r.Headers {
+		if strings.EqualFold(h.Name, "Content-Length") {
+			continue
+		}
+		fmt.Fprintf(&b, "    %q: %q,\n", h.Name, h.Value)
+	}
+	b.WriteString("}\n")
+	bodyArg := ""
+	if len(r.Body) > 0 && isPrintable(r.Body) {
+		fmt.Fprintf(&b, "data = %q\n", string(r.Body))
+		bodyArg = ", data=data"
+	}
+	fmt.Fprintf(&b, "\nr = requests.request(%q, %q, headers=headers%s)\nprint(r.status_code, r.text)\n",
+		orDefault(r.Method, "GET"), u, bodyArg)
+	return b.String()
+}
+
 // Raw renders the request the way it arrived on the wire.
 func Raw(r model.Request) string {
 	var b strings.Builder

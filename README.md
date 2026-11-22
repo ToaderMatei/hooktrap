@@ -33,10 +33,12 @@ HookTrap is a single compiled `hooktrap.exe` (no runtime, no dependencies) that 
 | **Live capture** | Every HTTP request shown the instant it lands, over Server-Sent Events. Method, path, query, headers, body, source IP, uploaded files. |
 | **Bins** | Named endpoints (`/<bin>` or `<bin>.host`). A catch-all `default` bin logs everything else. |
 | **Scriptable responses** | Per-bin reply: status, headers, body, artificial delay, permissive CORS, `302` redirect (raw `Location`, SSRF-friendly), or **echo** mode that reflects the request as JSON. `{{ip}}`, `{{query}}`, `{{q:name}}`, `{{body}}`… placeholders. |
-| **Payload / OAST generator** | One-click out-of-band callback templates (blind XSS, SSRF, OOB-XXE, DNS/TCP) wired to your capture URL — the Collaborator idea, offline. |
+| **Replay** | Re-send any captured request to a target of your choice (Burp-Repeater style) and inspect the response inline. |
+| **Payload / OAST generator** | One-click out-of-band callback templates (blind XSS, SSRF, OOB-XXE, SSTI, Log4Shell/JNDI, CRLF/Host, file-upload, DNS/TCP) wired to your capture URL — the Collaborator idea, offline. |
 | **Hosted files** | Serve small fixtures/DTDs/JS at `/f/<name>`; each fetch is logged. |
 | **DNS & raw TCP listeners** | Optional listeners make out-of-band DNS/TCP callbacks visible, not just HTTP. |
-| **Export** | Any request as **curl**, raw HTTP, **JSON** or **HAR** (import into Burp / browsers). |
+| **Export** | Any request as **curl**, **fetch**, **python requests**, raw HTTP, **JSON** or **HAR** (import into Burp / browsers). |
+| **Deep links & filters** | Each bin is linkable via `#<bin>`; filter the stream by text or **starred** only. |
 | **Public tunnel** | One click to expose the capture port via `cloudflared` (if installed) for remote targets. |
 | **Local-only dashboard** | The UI binds to `127.0.0.1`; only the capture listeners face the network, and only if you choose `0.0.0.0`. |
 

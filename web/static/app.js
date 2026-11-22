@@ -81,6 +81,7 @@ function renderBins() {
 async function selectBin(id, reload = true) {
   state.currentBin = id; state.currentReq = null;
   $('#endpoint-url').textContent = captureBase(id);
+  try { history.replaceState(null, '', '#' + id); } catch { }
   renderBins();
   if (reload) { await loadRequests(); renderDetail(); }
 }
@@ -90,15 +91,18 @@ async function loadRequests() {
   const q = encodeURIComponent(state.search);
   state.requests = await api.get(`/api/bins/${state.currentBin}/requests?limit=500&q=${q}`);
   renderRequests();
+  // Auto-open the latest request so the detail pane is never empty on arrival.
+  if (!state.currentReq && state.requests.length) openRequest(state.requests[0].id);
 }
 
 function renderRequests(flashId) {
   const el = $('#req-list');
-  if (!state.requests.length) {
-    el.innerHTML = `<div class="empty">No requests yet.<br />Fire one at the capture URL above.</div>`;
+  const list = state.starredOnly ? state.requests.filter(r => r.starred) : state.requests;
+  if (!list.length) {
+    el.innerHTML = `<div class="empty">${state.starredOnly ? 'No starred requests in this bin.' : 'No requests yet.<br />Fire one at the capture URL above.'}</div>`;
     return;
   }
-  el.innerHTML = state.requests.map(r => {
+  el.innerHTML = list.map(r => {
     const m = methodClass(r);
     const label = r.kind === 'http' ? (r.path || '/') + (r.query ? '?' + r.query : '') : (r.summary || r.kind);
     return `<div class="req ${r.id === state.currentReq ? 'active' : ''} ${r.id === flashId ? 'flash' : ''}" data-id="${esc(r.id)}">
@@ -133,9 +137,12 @@ function renderDetail(r) {
       <div class="sub">${esc(r.id)} · ${new Date(r.time).toLocaleString()}</div>
       <div class="actions">
         <button class="btn sm" data-act="star">${r.starred ? '★ starred' : '☆ star'}</button>
+        ${r.kind === 'http' ? '<button class="btn sm" data-act="replay">↻ replay</button>' : ''}
         <button class="btn sm ghost" data-act="copy-curl">copy curl</button>
-        <button class="btn sm ghost" data-act="dl-json">export json</button>
-        <button class="btn sm ghost" data-act="dl-har">export har</button>
+        <button class="btn sm ghost" data-act="copy-fetch">copy fetch</button>
+        <button class="btn sm ghost" data-act="copy-python">copy python</button>
+        <button class="btn sm ghost" data-act="dl-json">json</button>
+        <button class="btn sm ghost" data-act="dl-har">har</button>
         <button class="btn sm danger" data-act="del">delete</button>
       </div>
       <dl class="kv">
@@ -193,8 +200,11 @@ async function detailAction(act, r) {
   try {
     if (act === 'star') { const u = await api.send('PATCH', `/api/requests/${r.id}`, { starred: !r.starred }); state.reqCache = u; await loadRequests(); renderDetail(u); }
     else if (act === 'copy-curl') { const res = await fetch(`/api/requests/${r.id}/export?format=curl`); copy(await res.text()); }
+    else if (act === 'copy-fetch') { const res = await fetch(`/api/requests/${r.id}/export?format=fetch`); copy(await res.text()); }
+    else if (act === 'copy-python') { const res = await fetch(`/api/requests/${r.id}/export?format=python`); copy(await res.text()); }
     else if (act === 'dl-json') download(`/api/requests/${r.id}/export?format=json`);
     else if (act === 'dl-har') download(`/api/requests/${r.id}/export?format=har`);
+    else if (act === 'replay') replayModal(r);
     else if (act === 'del') { if (confirm('Delete this request?')) { await api.send('DELETE', `/api/requests/${r.id}`); state.currentReq = null; await loadRequests(); renderDetail(); } }
   } catch (e) { toast(e.message, 'err'); }
 }
@@ -390,6 +400,27 @@ function settingsModal() {
   };
 }
 
+function replayModal(r) {
+  const guess = (r.scheme || 'http') + '://' + (r.host || 'target.example') + (r.path || '/') + (r.query ? '?' + r.query : '');
+  modal('Replay request', `
+    <div class="banner-note">Re-send this captured request (its method, headers and body) to a target of your choice — like Burp Repeater. Outbound request made by HookTrap; use only against systems you are authorised to test.</div>
+    <div class="field"><label>Target URL</label><input id="rp-url" value="${esc(guess)}" placeholder="http://127.0.0.1:8000/path" /></div>
+    <div class="field"><label>Method (blank = keep ${esc(r.method || 'GET')})</label><input id="rp-method" placeholder="${esc(r.method || 'GET')}" /></div>
+    <div id="rp-result"></div>`,
+    `<button class="btn ghost" data-close>close</button><button class="btn" id="rp-send">↻ send</button>`);
+  $('#rp-send').onclick = async () => {
+    const out = $('#rp-result');
+    out.innerHTML = '<div class="empty">sending…</div>';
+    try {
+      const res = await api.send('POST', `/api/requests/${r.id}/replay`, { url: $('#rp-url').value.trim(), method: $('#rp-method').value.trim() });
+      if (!res.ok) { out.innerHTML = `<div class="section-label">error</div><pre class="body">${esc(res.error)}</pre>`; return; }
+      out.innerHTML = `<div class="section-label">response · ${res.status} · ${res.ms} ms · ${fmtBytes(res.bodySize)}</div>
+        <div class="headers">${(res.headers || []).slice(0, 20).map(h => `<div class="h"><span class="hn">${esc(h.name)}:</span><span class="hv">${esc(h.value)}</span></div>`).join('')}</div>
+        <pre class="body" style="margin-top:.6rem">${esc(res.body || '')}</pre>`;
+    } catch (e) { out.innerHTML = `<div class="section-label">error</div><pre class="body">${esc(e.message)}</pre>`; }
+  };
+}
+
 function helpModal() {
   modal('Help &amp; safety', `
     <div class="banner-note">HookTrap is for authorised security testing, lab exercises and CTFs. Capturing traffic from systems you do not own or have no permission to test may be illegal. You are responsible for how you use it.</div>
@@ -399,7 +430,8 @@ function helpModal() {
       <b>Payload generator</b> builds out-of-band callback snippets (blind XSS, SSRF, OOB-XXE, DNS/TCP) wired to your URL.<br><br>
       <b>Hosted files</b> serve small payloads/fixtures at <code>/f/&lt;name&gt;</code>.<br><br>
       <b>Tunnel</b> exposes the capture port publicly via <code>cloudflared</code> (install it separately and it appears here).<br><br>
-      <b>Export</b> any request as curl, raw HTTP, JSON or HAR.
+      <b>Replay</b> re-sends a captured request to a target you choose (Burp-Repeater style).<br><br>
+      <b>Export</b> any request as curl, fetch, python, raw HTTP, JSON or HAR.
     </p>
     <div class="hint">Keyboard: / focus search · j/k next/prev request · n new bin · r respond editor</div>`,
     `<button class="btn" data-close>got it</button>`);
@@ -425,6 +457,7 @@ function wire() {
   $('#help-btn').onclick = helpModal;
   $('#clear-bin-btn').onclick = async () => { if (state.currentBin && confirm('Clear all requests in this bin?')) { try { await api.send('POST', `/api/bins/${state.currentBin}/clear`); } catch (e) { toast(e.message, 'err'); } } };
   $('#export-bin-btn').onclick = exportBinMenu;
+  $('#starred-btn').onclick = e => { state.starredOnly = !state.starredOnly; e.currentTarget.classList.toggle('ghost', !state.starredOnly); e.currentTarget.style.color = state.starredOnly ? 'var(--yellow)' : ''; renderRequests(); };
   $('#copy-endpoint').onclick = () => copy(captureBase(state.currentBin));
   $('#endpoint-url').onclick = () => copy(captureBase(state.currentBin));
   $('#theme-btn').onclick = toggleTheme;
@@ -466,7 +499,20 @@ async function toggleTunnel() {
 async function init() {
   try { const t = localStorage.getItem('hooktrap-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch { }
   wire();
-  try { await loadState(); if (state.currentBin) await loadRequests(); } catch (e) { toast('Failed to load: ' + e.message, 'err'); }
-  connectLive();
+  // Capture the requested bin from the URL before loadState() auto-selects one.
+  const hashBin = decodeURIComponent((location.hash || '').replace(/^#\/?/, ''));
+  try {
+    await loadState();
+    if (hashBin && state.bins.some(b => b.id === hashBin)) await selectBin(hashBin);
+    else if (state.currentBin) await loadRequests();
+  } catch (e) { toast('Failed to load: ' + e.message, 'err'); }
+  // ?live=0 disables the SSE stream (used for static screenshots / embedding).
+  if (!/[?&]live=0\b/.test(location.search)) connectLive();
+  else { const p = $('#live-pill'); p.className = 'pill'; $('#live-text').textContent = 'static'; }
+  // ?shot=<tool> opens a panel on load (screenshots / demos).
+  const shot = new URLSearchParams(location.search).get('shot');
+  if (shot === 'payloads') payloadsModal();
+  else if (shot === 'files') filesModal();
+  else if (shot === 'settings') settingsModal();
 }
 init();

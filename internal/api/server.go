@@ -64,6 +64,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PATCH /api/requests/{id}", s.handleAnnotateRequest)
 	m.HandleFunc("DELETE /api/requests/{id}", s.handleDeleteRequest)
 	m.HandleFunc("GET /api/requests/{id}/export", s.handleExportRequest)
+	m.HandleFunc("POST /api/requests/{id}/replay", s.handleReplay)
 
 	m.HandleFunc("GET /api/files", s.handleListFiles)
 	m.HandleFunc("POST /api/files", s.handleUploadFile)

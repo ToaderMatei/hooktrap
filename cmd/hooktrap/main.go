@@ -216,4 +216,3 @@ func printBanner(cfg config.Settings, dashURL string) {
 
 `, version, dashURL, "<this-host>", cfg.HTTPPort, cfg.BindAddr)
 }
-

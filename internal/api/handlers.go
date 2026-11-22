@@ -195,6 +195,10 @@ func (s *Server) handleExportRequest(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Query().Get("format") {
 	case "curl":
 		writeText(w, export.Curl(req))
+	case "fetch":
+		writeText(w, export.Fetch(req))
+	case "python":
+		writeText(w, export.Python(req))
 	case "raw":
 		writeText(w, export.Raw(req))
 	case "har":

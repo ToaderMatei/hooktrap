@@ -92,6 +92,57 @@ func TestRequestsAndExport(t *testing.T) {
 	}
 }
 
+func TestReplay(t *testing.T) {
+	// Target the request will be replayed to.
+	var gotMethod, gotBody string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte("replayed-ok"))
+	}))
+	defer target.Close()
+
+	s := testServer(t)
+	stored, _ := s.app.Record(model.Request{BinID: store.DefaultBinID, Kind: model.KindHTTP, Method: "POST", Host: "h", Path: "/p", Body: []byte("payload=1")})
+
+	w := do(t, s, "POST", "/api/requests/"+stored.ID+"/replay", `{"url":"`+target.URL+`"}`)
+	if w.Code != 200 {
+		t.Fatalf("replay http %d: %s", w.Code, w.Body.String())
+	}
+	var res struct {
+		OK     bool `json:"ok"`
+		Status int  `json:"status"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &res)
+	if !res.OK || res.Status != 201 {
+		t.Fatalf("replay result: %s", w.Body.String())
+	}
+	if gotMethod != "POST" || gotBody != "payload=1" {
+		t.Fatalf("target saw method=%q body=%q", gotMethod, gotBody)
+	}
+}
+
+func TestReplayRejectsNonHTTPTarget(t *testing.T) {
+	s := testServer(t)
+	stored, _ := s.app.Record(model.Request{BinID: store.DefaultBinID, Kind: model.KindHTTP, Method: "GET", Host: "h", Path: "/"})
+	if w := do(t, s, "POST", "/api/requests/"+stored.ID+"/replay", `{"url":"ftp://x"}`); w.Code != 400 {
+		t.Fatalf("expected 400 for bad target, got %d", w.Code)
+	}
+}
+
+func TestExportFetchAndPython(t *testing.T) {
+	s := testServer(t)
+	stored, _ := s.app.Record(model.Request{BinID: store.DefaultBinID, Kind: model.KindHTTP, Method: "GET", Host: "h", Path: "/x"})
+	if w := do(t, s, "GET", "/api/requests/"+stored.ID+"/export?format=fetch", ""); !strings.Contains(w.Body.String(), "fetch(") {
+		t.Fatalf("fetch export: %s", w.Body.String())
+	}
+	if w := do(t, s, "GET", "/api/requests/"+stored.ID+"/export?format=python", ""); !strings.Contains(w.Body.String(), "import requests") {
+		t.Fatalf("python export: %s", w.Body.String())
+	}
+}
+
 func TestPayloadsEndpoint(t *testing.T) {
 	s := testServer(t)
 	w := do(t, s, "GET", "/api/payloads?bin=default", "")

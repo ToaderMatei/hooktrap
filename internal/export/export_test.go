@@ -55,6 +55,23 @@ func TestHARValid(t *testing.T) {
 	}
 }
 
+func TestFetch(t *testing.T) {
+	f := Fetch(sample())
+	if !strings.Contains(f, `fetch("http://example.test/submit?a=1"`) || !strings.Contains(f, `method: "POST"`) {
+		t.Fatalf("fetch missing parts: %s", f)
+	}
+	if !strings.Contains(f, `body: "{\"k\":\"v\"}"`) {
+		t.Fatalf("fetch missing body: %s", f)
+	}
+}
+
+func TestPython(t *testing.T) {
+	p := Python(sample())
+	if !strings.Contains(p, "import requests") || !strings.Contains(p, `requests.request("POST"`) {
+		t.Fatalf("python missing parts: %s", p)
+	}
+}
+
 func TestJSON(t *testing.T) {
 	data, err := JSON([]model.Request{sample()})
 	if err != nil {
