@@ -27,7 +27,8 @@ New-Item -ItemType Directory -Force $dist | Out-Null
 
 Write-Host "==> Building hooktrap.exe (windows/amd64) version $Version" -ForegroundColor Cyan
 $env:CGO_ENABLED = "0"; $env:GOOS = "windows"; $env:GOARCH = "amd64"
-& $go build -trimpath -ldflags "-s -w -X main.version=$Version" -o (Join-Path $dist "hooktrap.exe") ./cmd/hooktrap
+# -H windowsgui => GUI subsystem: no console window when double-clicked.
+& $go build -trimpath -ldflags "-s -w -H windowsgui -X main.version=$Version" -o (Join-Path $dist "hooktrap.exe") ./cmd/hooktrap
 if ($LASTEXITCODE -ne 0) { throw "go build failed" }
 Write-Host "    -> $(Join-Path $dist 'hooktrap.exe')" -ForegroundColor Green
 

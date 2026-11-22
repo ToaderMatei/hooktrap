@@ -24,6 +24,7 @@
     <span class="pill off" id="live-pill"><span class="dot"></span><span id="live-text">connecting…</span></span>
     <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">⚙</button>
     <button class="icon-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    <button class="icon-btn" id="quit-btn" title="Quit HookTrap" aria-label="Quit">⏻</button>
   </header>
 
   <div class="layout">
@@ -46,6 +47,7 @@
     <section class="main">
       <div class="list-col">
         <div class="endpoint-bar">
+          <select class="host-select" id="host-select" title="Reachable address used by copy &amp; payloads"></select>
           <span class="endpoint-url" id="endpoint-url" title="Click to copy">—</span>
           <button class="btn sm" id="copy-endpoint">copy</button>
           <button class="btn sm ghost" id="respond-btn">respond ▾</button>

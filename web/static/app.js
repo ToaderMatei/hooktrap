@@ -22,6 +22,7 @@ const state = {
   cfg: null, version: 'dev', bins: [], currentBin: null,
   requests: [], currentReq: null, detailTab: 'pretty', search: '',
   tunnel: { running: false, url: '' }, tunnelAvailable: false,
+  lanIPs: [], publicIP: '', hostRoot: '', starredOnly: false,
 };
 
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -50,11 +51,61 @@ async function copy(text) {
 }
 
 /* ── Capture URL helpers ── */
-function captureBase(binId) {
-  if (state.cfg && state.cfg.publicUrl) return state.cfg.publicUrl.replace(/\/$/, '') + '/' + binId;
-  const host = location.hostname;
+// chosenRoot is the externally reachable base (scheme://host[:port]) the operator
+// picked in the host selector — localhost, a LAN IP, the detected public IP or a
+// tunnel. Everything that is copied or put into a payload uses it.
+function chosenRoot() {
+  if (state.hostRoot && state.hostRoot !== '__public') return state.hostRoot;
+  if (state.cfg && state.cfg.publicUrl) return state.cfg.publicUrl.replace(/\/$/, '');
   const port = state.cfg ? state.cfg.httpPort : 8080;
-  return `http://${host}:${port}/${binId}`;
+  return `http://${location.hostname}:${port}`;
+}
+function captureBase(binId) { return chosenRoot() + '/' + binId; }
+
+function hostOptions() {
+  const port = state.cfg ? state.cfg.httpPort : 8080;
+  const opts = [{ label: 'localhost', root: `http://127.0.0.1:${port}` }];
+  (state.lanIPs || []).forEach(ip => opts.push({ label: `LAN · ${ip}`, root: `http://${ip}:${port}` }));
+  if (state.publicIP) opts.push({ label: `public · ${state.publicIP}`, root: `http://${state.publicIP}:${port}` });
+  const turl = (state.tunnel && state.tunnel.url) || (state.cfg && state.cfg.publicUrl);
+  if (turl) opts.push({ label: 'tunnel', root: turl.replace(/\/$/, '') });
+  opts.push({ label: 'detect public IP…', root: '__public' });
+  return opts;
+}
+
+function renderHostSelect() {
+  const sel = $('#host-select');
+  if (!sel) return;
+  const opts = hostOptions();
+  if (state.hostRoot && state.hostRoot !== '__public' && !opts.some(o => o.root === state.hostRoot)) {
+    try { const u = new URL(state.hostRoot); opts.unshift({ label: `saved · ${u.hostname}`, root: state.hostRoot }); } catch { }
+  }
+  sel.innerHTML = opts.map(o => `<option value="${esc(o.root)}">${esc(o.label)}</option>`).join('');
+  if (!state.hostRoot || state.hostRoot === '__public') state.hostRoot = opts[0].root;
+  sel.value = state.hostRoot;
+}
+
+function applyHost() {
+  try { localStorage.setItem('hooktrap-host', state.hostRoot); } catch { }
+  if (state.currentBin) $('#endpoint-url').textContent = captureBase(state.currentBin);
+}
+
+async function onHostChange() {
+  const sel = $('#host-select');
+  if (sel.value === '__public') {
+    sel.disabled = true;
+    try {
+      const d = await api.get('/api/public-ip');
+      state.publicIP = d.ip;
+      state.hostRoot = `http://${d.ip}:${state.cfg.httpPort}`;
+      toast(`Public IP ${d.ip}. Port ${state.cfg.httpPort} must be reachable (forward it) — or use a tunnel.`, 'ok');
+    } catch (e) { toast('Could not detect public IP: ' + e.message, 'err'); }
+    sel.disabled = false;
+    renderHostSelect(); applyHost();
+    return;
+  }
+  state.hostRoot = sel.value;
+  renderHostSelect(); applyHost();
 }
 
 /* ── State / bins ── */
@@ -63,7 +114,9 @@ async function loadState() {
   state.cfg = s.config; state.version = s.version; state.bins = s.bins || [];
   state.tunnel = s.tunnel || { running: false, url: '' };
   state.tunnelAvailable = s.tunnelAvailable;
+  state.lanIPs = s.lanIPs || [];
   $('#version').textContent = 'v' + s.version;
+  renderHostSelect();
   if (!state.currentBin && state.bins.length) selectBin(state.bins[0].id, false);
   renderBins(); renderTunnel();
 }
@@ -233,7 +286,7 @@ function connectLive() {
   });
   es.addEventListener('cleared', e => { const ev = JSON.parse(e.data); if (ev.binId === state.currentBin) { state.requests = []; state.currentReq = null; renderRequests(); renderDetail(); } loadState(); });
   es.addEventListener('bins', () => loadState());
-  es.addEventListener('tunnel', e => { const ev = JSON.parse(e.data); state.tunnel = { running: true, url: ev.message }; renderTunnel(); toast('Tunnel ready: ' + ev.message, 'ok'); $('#endpoint-url').textContent = captureBase(state.currentBin); });
+  es.addEventListener('tunnel', e => { const ev = JSON.parse(e.data); state.tunnel = { running: true, url: ev.message }; renderTunnel(); renderHostSelect(); toast('Tunnel ready: ' + ev.message, 'ok'); applyHost(); });
   es.onerror = () => { pill.className = 'pill off'; txt.textContent = 'reconnecting…'; };
 }
 function bumpBinCount(binId) {
@@ -301,7 +354,7 @@ function respondModal() {
 async function payloadsModal() {
   modal('Payload / OAST generator', '<div class="empty">loading…</div>');
   try {
-    const d = await api.get(`/api/payloads?bin=${state.currentBin || 'default'}`);
+    const d = await api.get(`/api/payloads?bin=${state.currentBin || 'default'}&root=${encodeURIComponent(chosenRoot())}`);
     const body = d.groups.map(g => `
       <div class="pl-group">
         <h4>${esc(g.category)}</h4>
@@ -351,10 +404,7 @@ async function filesModal() {
   };
   render();
 }
-function captureBaseRoot() {
-  if (state.cfg && state.cfg.publicUrl) return state.cfg.publicUrl.replace(/\/$/, '');
-  return `http://${location.hostname}:${state.cfg ? state.cfg.httpPort : 8080}`;
-}
+function captureBaseRoot() { return chosenRoot(); }
 
 function settingsModal() {
   const c = state.cfg;
@@ -425,6 +475,7 @@ function helpModal() {
   modal('Help &amp; safety', `
     <div class="banner-note">HookTrap is for authorised security testing, lab exercises and CTFs. Capturing traffic from systems you do not own or have no permission to test may be illegal. You are responsible for how you use it.</div>
     <p style="font-size:.85rem;color:var(--text-secondary)">
+      <b>Reachable address</b> — the dropdown by the capture URL picks what <b>copy</b> and the payload generator use: localhost, a LAN IP, your detected <b>public IP</b> (forward the capture port, or use a tunnel, for it to be reachable from the internet — handy for an XSS beacon), or a tunnel URL.<br><br>
       <b>Bins</b> are capture endpoints. Point any client at <code>${esc(captureBaseRoot())}/&lt;bin&gt;</code> and every request is logged live.<br><br>
       <b>Respond</b> lets a bin reply with a chosen status, headers, body (with {{placeholders}}), a redirect, an echo, or an artificial delay.<br><br>
       <b>Payload generator</b> builds out-of-band callback snippets (blind XSS, SSRF, OOB-XXE, DNS/TCP) wired to your URL.<br><br>
@@ -460,6 +511,8 @@ function wire() {
   $('#starred-btn').onclick = e => { state.starredOnly = !state.starredOnly; e.currentTarget.classList.toggle('ghost', !state.starredOnly); e.currentTarget.style.color = state.starredOnly ? 'var(--yellow)' : ''; renderRequests(); };
   $('#copy-endpoint').onclick = () => copy(captureBase(state.currentBin));
   $('#endpoint-url').onclick = () => copy(captureBase(state.currentBin));
+  $('#host-select').onchange = onHostChange;
+  $('#quit-btn').onclick = quitApp;
   $('#theme-btn').onclick = toggleTheme;
   $('#tunnel-pill').onclick = toggleTunnel;
   let searchTimer;
@@ -487,6 +540,14 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem('hooktrap-theme', next); } catch { }
 }
+async function quitApp() {
+  if (!confirm('Quit HookTrap? The capture server will stop.')) return;
+  try { await api.send('POST', '/api/quit'); } catch { }
+  document.body.innerHTML = `<div style="display:flex;height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:.6rem;font-family:var(--font-mono);color:var(--text-muted)">
+    <div style="font-size:2rem;color:var(--accent)">&gt;_</div>
+    <div>HookTrap stopped. You can close this window.</div></div>`;
+}
+
 async function toggleTunnel() {
   if (!state.tunnelAvailable) { toast('Install cloudflared and restart to use tunnels', 'err'); return; }
   try {
@@ -498,6 +559,7 @@ async function toggleTunnel() {
 
 async function init() {
   try { const t = localStorage.getItem('hooktrap-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch { }
+  try { state.hostRoot = localStorage.getItem('hooktrap-host') || ''; } catch { }
   wire();
   // Capture the requested bin from the URL before loadState() auto-selects one.
   const hashBin = decodeURIComponent((location.hash || '').replace(/^#\/?/, ''));

@@ -11,6 +11,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -46,7 +47,9 @@ func run() error {
 		dataFlag    = flag.String("data", "", "data directory (default: per-user app data)")
 		httpPort    = flag.Int("http-port", 0, "override capture HTTP port")
 		adminPort   = flag.Int("admin-port", 0, "override dashboard port")
-		noBrowser   = flag.Bool("no-browser", false, "do not open the dashboard in a browser")
+		noBrowser   = flag.Bool("no-browser", false, "do not open the dashboard window")
+		serverOnly  = flag.Bool("server", false, "run the server only, without opening a UI window")
+		tabMode     = flag.Bool("tab", false, "open the dashboard in a normal browser tab instead of an app window")
 		showVersion = flag.Bool("version", false, "print version and exit")
 	)
 	flag.Parse()
@@ -54,8 +57,6 @@ func run() error {
 		fmt.Println("HookTrap", version)
 		return nil
 	}
-
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	dataDir := *dataFlag
 	if dataDir == "" {
@@ -69,6 +70,17 @@ func run() error {
 		return fmt.Errorf("create data dir: %w", err)
 	}
 
+	// Log to a file in the data dir (the GUI build has no console) and, when a
+	// console is attached, to stderr too.
+	var logw io.Writer = os.Stderr
+	if lf, err := os.OpenFile(filepath.Join(dataDir, "hooktrap.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+		defer lf.Close()
+		// File first: in the GUI build os.Stderr is an invalid handle, and
+		// io.MultiWriter stops at the first write error.
+		logw = io.MultiWriter(lf, os.Stderr)
+	}
+	log := slog.New(slog.NewTextHandler(logw, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
 	cfg, err := config.Load(dataDir)
 	if err != nil {
 		log.Warn("config", "msg", err)
@@ -79,7 +91,7 @@ func run() error {
 	if *adminPort != 0 {
 		cfg.AdminPort = *adminPort
 	}
-	if *noBrowser {
+	if *noBrowser || *serverOnly {
 		cfg.OpenBrowser = false
 	}
 	cfg = cfg.Normalize()
@@ -111,11 +123,21 @@ func run() error {
 
 	adminAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(cfg.AdminPort))
 	server := api.NewServer(application, web.FS(), rt.reload)
+	server.OnQuit = stop // the dashboard's Quit button shuts the app down
 
 	dashURL := "http://" + adminAddr + "/"
 	printBanner(cfg, dashURL)
 	if cfg.OpenBrowser {
-		go openBrowser(dashURL)
+		if *tabMode {
+			go openBrowser(dashURL)
+		} else if cmd := launchAppWindow(dashURL, filepath.Join(dataDir, "browser")); cmd != nil {
+			// Run like an app: quit when the dashboard window is closed.
+			go func() { _ = cmd.Wait(); stop() }()
+			log.Info("dashboard opened as app window")
+		} else {
+			log.Warn("no Chromium browser found; opening a normal browser tab")
+			go openBrowser(dashURL)
+		}
 	}
 
 	errCh := make(chan error, 1)

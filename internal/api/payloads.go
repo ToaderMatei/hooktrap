@@ -49,10 +49,16 @@ func (s *Server) handlePayloads(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// captureBase picks the externally reachable base URL for binID: the configured
-// public URL (tunnel) when set, otherwise the host the dashboard was opened on
-// with the capture port.
+// captureBase picks the externally reachable base URL for binID. A valid ?root
+// override (the address the operator chose in the dashboard, e.g. a LAN or
+// public IP) wins; otherwise the configured public URL (tunnel); otherwise the
+// host the dashboard was opened on with the capture port.
 func (s *Server) captureBase(r *http.Request, binID string) string {
+	if root := strings.TrimRight(strings.TrimSpace(r.URL.Query().Get("root")), "/"); root != "" {
+		if u, err := url.Parse(root); err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+			return root + "/" + binID
+		}
+	}
 	cfg := s.app.Config()
 	if pub := cfg.PublicURL; pub != "" {
 		return strings.TrimRight(pub, "/") + "/" + binID

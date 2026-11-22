@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ToaderMatei/hooktrap/internal/config"
 	"github.com/ToaderMatei/hooktrap/internal/export"
@@ -56,6 +57,7 @@ func (s *Server) handleState(w http.ResponseWriter, _ *http.Request) {
 		"tunnel":          s.app.Tunnel.State(),
 		"tunnelAvailable": tunnelAvailable(),
 		"subscribers":     s.app.Broker.Count(),
+		"lanIPs":          lanIPs(),
 	})
 }
 
@@ -337,4 +339,19 @@ func (s *Server) handleTunnelStart(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleTunnelStop(w http.ResponseWriter, _ *http.Request) {
 	s.app.Tunnel.Stop()
 	writeJSON(w, http.StatusOK, s.app.Tunnel.State())
+}
+
+// handleQuit shuts the whole application down. The admin server is loopback-only,
+// so only a local client can reach it.
+func (s *Server) handleQuit(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "shutting down"})
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	if s.OnQuit != nil {
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			s.OnQuit()
+		}()
+	}
 }

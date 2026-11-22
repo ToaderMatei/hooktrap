@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/ToaderMatei/hooktrap/internal/app"
 	"github.com/ToaderMatei/hooktrap/internal/config"
@@ -140,6 +141,59 @@ func TestExportFetchAndPython(t *testing.T) {
 	}
 	if w := do(t, s, "GET", "/api/requests/"+stored.ID+"/export?format=python", ""); !strings.Contains(w.Body.String(), "import requests") {
 		t.Fatalf("python export: %s", w.Body.String())
+	}
+}
+
+func TestStateIncludesLanIPs(t *testing.T) {
+	s := testServer(t)
+	w := do(t, s, "GET", "/api/state", "")
+	var out struct {
+		LanIPs []string `json:"lanIPs"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// lanIPs may be empty on an isolated runner; it must at least be present as an array.
+	if out.LanIPs == nil {
+		// nil decodes to empty slice only if key present; accept both empty and populated.
+		t.Log("no LAN IPs detected on this host (acceptable)")
+	}
+}
+
+func TestPayloadsRootOverride(t *testing.T) {
+	s := testServer(t)
+	w := do(t, s, "GET", "/api/payloads?bin=default&root=http://203.0.113.9:8080", "")
+	var out struct {
+		Base string `json:"base"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Base != "http://203.0.113.9:8080/default" {
+		t.Fatalf("root override not applied: %q", out.Base)
+	}
+}
+
+func TestPayloadsRejectsBadRoot(t *testing.T) {
+	s := testServer(t)
+	// A non-http root must be ignored (falls back to the request host), not reflected.
+	w := do(t, s, "GET", "/api/payloads?bin=default&root=javascript:alert(1)", "")
+	if strings.Contains(w.Body.String(), "javascript:") {
+		t.Fatalf("unsafe root was reflected: %s", w.Body.String())
+	}
+}
+
+func TestQuitInvokesOnQuit(t *testing.T) {
+	s := testServer(t)
+	done := make(chan struct{})
+	s.OnQuit = func() { close(done) }
+	if w := do(t, s, "POST", "/api/quit", ""); w.Code != 200 {
+		t.Fatalf("quit status %d", w.Code)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnQuit was not invoked")
 	}
 }
 

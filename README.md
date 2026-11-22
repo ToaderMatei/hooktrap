@@ -33,6 +33,7 @@ HookTrap is a single compiled `hooktrap.exe` (no runtime, no dependencies) that 
 | **Live capture** | Every HTTP request shown the instant it lands, over Server-Sent Events. Method, path, query, headers, body, source IP, uploaded files. |
 | **Bins** | Named endpoints (`/<bin>` or `<bin>.host`). A catch-all `default` bin logs everything else. |
 | **Scriptable responses** | Per-bin reply: status, headers, body, artificial delay, permissive CORS, `302` redirect (raw `Location`, SSRF-friendly), or **echo** mode that reflects the request as JSON. `{{ip}}`, `{{query}}`, `{{q:name}}`, `{{body}}`… placeholders. |
+| **Reachable address** | Pick what **copy** and the payload generator use: localhost, a **LAN IP**, your detected **public IP**, or a tunnel URL — so the capture URL you drop into an XSS/SSRF is actually reachable from the target. |
 | **Replay** | Re-send any captured request to a target of your choice (Burp-Repeater style) and inspect the response inline. |
 | **Payload / OAST generator** | One-click out-of-band callback templates (blind XSS, SSRF, OOB-XXE, SSTI, Log4Shell/JNDI, CRLF/Host, file-upload, DNS/TCP) wired to your capture URL — the Collaborator idea, offline. |
 | **Hosted files** | Serve small fixtures/DTDs/JS at `/f/<name>`; each fetch is logged. |
@@ -48,7 +49,7 @@ HookTrap is a single compiled `hooktrap.exe` (no runtime, no dependencies) that 
 
 **Windows** — download `HookTrap-x.y.z-Setup.exe` from the [latest release](https://github.com/ToaderMatei/hooktrap/releases/latest) and run it. Or grab the standalone `hooktrap.exe` and double-click it — no installation needed.
 
-On launch, HookTrap starts the capture server and opens the dashboard at `http://127.0.0.1:8099`.
+HookTrap runs **as a desktop app**: it opens the dashboard in its **own window** (via Edge/Chrome app mode) with **no console/terminal window**. Close the window — or hit the ⏻ Quit button — and the capture server stops. Logs are written to `%APPDATA%\HookTrap\hooktrap.log`.
 
 ## Quick start
 
@@ -86,7 +87,9 @@ hooktrap [flags]
   --http-port N     override the capture HTTP port
   --admin-port N    override the dashboard port
   --data DIR        data directory (default: per-user app data)
-  --no-browser      do not open the dashboard on start
+  --server          run the capture server only, without opening a UI window
+  --tab             open the dashboard in a normal browser tab (not an app window)
+  --no-browser      do not open any UI on start
   --version         print version and exit
 ```
 

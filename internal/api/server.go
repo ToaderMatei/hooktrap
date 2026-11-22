@@ -22,6 +22,9 @@ type Server struct {
 	reload ReloadFunc
 	mux    *http.ServeMux
 	srv    *http.Server
+
+	// OnQuit, when set, is invoked by POST /api/quit to shut the app down.
+	OnQuit func()
 }
 
 // NewServer builds the admin server. staticFS serves the web UI at /.
@@ -71,6 +74,8 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /api/files/{name}", s.handleDeleteFile)
 
 	m.HandleFunc("GET /api/payloads", s.handlePayloads)
+	m.HandleFunc("GET /api/public-ip", s.handlePublicIP)
+	m.HandleFunc("POST /api/quit", s.handleQuit)
 
 	m.HandleFunc("POST /api/config", s.handleSaveConfig)
 	m.HandleFunc("POST /api/tunnel/start", s.handleTunnelStart)
