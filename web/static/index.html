@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>HookTrap — local request capture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0708'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' fill='%23ff2b3a' text-anchor='middle'%3E%26gt;%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">HookTrap</span>
+      <small id="version">local request capture</small>
+    </div>
+    <span class="spacer"></span>
+    <span class="pill" id="tunnel-pill" title="Public tunnel" style="cursor:pointer">
+      <span class="dot"></span><span id="tunnel-text">tunnel: off</span>
+    </span>
+    <span class="pill off" id="live-pill"><span class="dot"></span><span id="live-text">connecting…</span></span>
+    <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">⚙</button>
+    <button class="icon-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="side-head">
+        <h2>Bins</h2>
+        <button class="btn sm" id="new-bin-btn">+ new</button>
+      </div>
+      <div id="bin-list"></div>
+
+      <div class="side-section">
+        <div class="side-head"><h2>Tools</h2></div>
+        <div class="side-link" id="payloads-btn">⚡ Payload generator</div>
+        <div class="side-link" id="files-btn">📁 Hosted files</div>
+        <div class="side-link" id="settings-link">⚙ Settings</div>
+        <div class="side-link" id="help-btn">? Help &amp; safety</div>
+      </div>
+    </aside>
+
+    <section class="main">
+      <div class="list-col">
+        <div class="endpoint-bar">
+          <span class="endpoint-url" id="endpoint-url" title="Click to copy">—</span>
+          <button class="btn sm" id="copy-endpoint">copy</button>
+          <button class="btn sm ghost" id="respond-btn">respond ▾</button>
+        </div>
+        <div class="toolbar">
+          <input class="search" id="search" placeholder="filter: method, path, header, body…" />
+          <button class="btn sm ghost" id="export-bin-btn">export ▾</button>
+          <button class="btn sm danger" id="clear-bin-btn">clear</button>
+        </div>
+        <div class="req-list" id="req-list"></div>
+      </div>
+      <div class="detail-col" id="detail-col">
+        <div class="placeholder">
+          <div class="big">&gt;_</div>
+          <p>Send a request to your capture URL.<br />It appears here the instant it lands.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="modal-root"></div>
+  <div class="toast-wrap" id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

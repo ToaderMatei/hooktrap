@@ -1,0 +1,12 @@
+# Normalise line endings: source stays LF in the repo.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF on checkout.
+*.ps1 text eol=crlf
+
+# Binary assets — never touch line endings.
+*.ico binary
+*.png binary
+*.syso binary
+*.woff binary
+*.exe binary
